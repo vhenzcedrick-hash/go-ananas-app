@@ -5,7 +5,7 @@ from PIL import Image
 
 # 1. Page Configuration & Custom Styling
 st.set_page_config(
-    page_title="Go Ananas! - AI Plant Doctor",
+    page_title="Go Ananas! - Pineapple Doctor",
     page_icon="🍍",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -51,7 +51,7 @@ recommendations = {
 # 3. Sidebar Configuration
 with st.sidebar:
     st.title("Go Ananas! 🍍")
-    st.markdown("### AI-Powered Pineapple Disease Detection")
+    st.markdown("### Pineapple Disease Detector")
     st.markdown("---")
     st.info("Upload a photo of a pineapple leaf, crown, or fruit section to diagnose health conditions instantly.")
     st.markdown("**Supported Conditions:**")
