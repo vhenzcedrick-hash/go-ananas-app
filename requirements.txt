@@ -1,0 +1,6 @@
+dependencies = [
+	"streamlit",
+	"tensorflow",
+	"numpy",
+	"pillow",
+]
