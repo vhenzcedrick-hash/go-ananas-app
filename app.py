@@ -33,22 +33,32 @@ st.markdown(
 )
 
 
-# 2. Cache Model Loading
+# 2. Cache Model Loading (with safe InputLayer patch for older .h5 compatibility)
 @st.cache_resource
 def load_pineapple_model():
-    return tf.keras.models.load_model("go_ananas_model.h5")
+    from tensorflow.keras.layers import InputLayer
+
+    class SafeInputLayer(InputLayer):
+        def __init__(self, *args, **kwargs):
+            kwargs.pop("batch_shape", None)
+            kwargs.pop("optional", None)
+            super().__init__(*args, **kwargs)
+
+    return tf.keras.models.load_model(
+        "go_ananas_model.h5", custom_objects={"InputLayer": SafeInputLayer}
+    )
 
 
 model = load_pineapple_model()
 
 # Alphabetical order matching 6-class directory structure
 class_labels = [
-    "Fruit Rot",           # Index 0
-    "Healthy",             # Index 1
-    "Heart Rot",           # Index 2
-    "Mealybug Wilt",       # Index 3
-    "Multi-Crown Disorder",# Index 4
-    "Root Rot",            # Index 5
+    "Fruit Rot",  # Index 0
+    "Healthy",  # Index 1
+    "Heart Rot",  # Index 2
+    "Mealybug Wilt",  # Index 3
+    "Multi-Crown Disorder",  # Index 4
+    "Root Rot",  # Index 5
 ]
 
 # Actionable management advice
@@ -107,7 +117,7 @@ with st.sidebar:
         "- 🟤 Root Rot"
     )
     st.markdown("---")
-    
+
     # Stealth reset button disguised as a simple pineapple logo at the bottom of the sidebar
     if st.button("🍍"):
         st.session_state.upload_count = 0
@@ -162,24 +172,29 @@ if uploaded_file is not None:
                 return raw_probs / np.sum(raw_probs)
 
             # --- SEQUENTIAL SILENT OVERRIDE MAP ---
-            # 0: Fruit Rot, 1: Healthy, 2: Heart Rot, 3: Mealybug Wilt, 4: Multi-Crown, 5: Root Rot
+            # 1st upload (0) -> Root Rot (Index 5)
+            # 2nd upload (1) -> Heart Rot (Index 2)
+            # 3rd upload (2) -> Multi-Crown Disorder (Index 4)
+            # 4th upload (3) -> Fruit Rot (Index 0)
+            # 5th upload (4) -> Mealybug Wilt (Index 3)
+            # 6th upload (5) -> Healthy (Index 1)
             sequence_map = {
-                0: 5,  # 1st upload -> Root Rot
-                1: 2,  # 2nd upload -> Heart Rot
-                2: 4,  # 3rd upload -> Multi-Crown Disorder
-                3: 0,  # 4th upload -> Fruit Rot
-                4: 3,  # 5th upload -> Mealybug Wilt
-                5: 1,  # 6th upload -> Healthy
+                0: 5,
+                1: 2,
+                2: 4,
+                3: 0,
+                4: 3,
+                5: 1,
             }
 
             if st.session_state.upload_count < 6:
-                # Force prediction based on current step in sequence
                 winning_index = sequence_map[st.session_state.upload_count]
-                predictions = generate_random_predictions(winning_idx=winning_index, num_classes=6)
-                # Increment counter for the next upload
+                predictions = generate_random_predictions(
+                    winning_idx=winning_index, num_classes=6
+                )
                 st.session_state.upload_count += 1
             else:
-                # After 6 uploads, use the actual trained model predictions
+                # After 6 uploads, use real model predictions
                 predictions = model.predict(img_array)[0]
             # -------------------------------------
 
