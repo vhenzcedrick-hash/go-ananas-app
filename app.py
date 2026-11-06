@@ -1,3 +1,5 @@
+import os
+import time
 import numpy as np
 import streamlit as st
 import tensorflow as tf
@@ -49,7 +51,6 @@ def load_pineapple_model():
             "go_ananas_model.h5", custom_objects={"InputLayer": SafeInputLayer}
         )
     except Exception as e:
-        # Fallback in case of Lambda layer or structural serialization mismatches
         print(f"Model load warning: {e}")
         return None
 
@@ -99,9 +100,31 @@ recommendations = {
     ),
 }
 
-# Initialize session state to track upload sequence count
-if "upload_count" not in st.session_state:
-    st.session_state.upload_count = 0
+# Helper function for Image Augmentation & Saving
+def augment_and_save_image(pil_img, label):
+    dataset_dir = os.path.join("dataset", label)
+    os.makedirs(dataset_dir, exist_ok=True)
+    
+    timestamp = int(time.time())
+    
+    # 1. Save Original
+    orig_path = os.path.join(dataset_dir, f"img_{timestamp}_orig.jpg")
+    pil_img.save(orig_path)
+    
+    # 2. Augmentation: Horizontal Flip
+    flipped_img = pil_img.transpose(Image.FLIP_LEFT_RIGHT)
+    flipped_path = os.path.join(dataset_dir, f"img_{timestamp}_flip.jpg")
+    flipped_img.save(flipped_path)
+    
+    # 3. Augmentation: Slight Rotation (+15 deg)
+    rot_pos = pil_img.rotate(15)
+    rot_pos_path = os.path.join(dataset_dir, f"img_{timestamp}_rot15.jpg")
+    rot_pos.save(rot_pos_path)
+    
+    # 4. Augmentation: Slight Rotation (-15 deg)
+    rot_neg = pil_img.rotate(-15)
+    rot_neg_path = os.path.join(dataset_dir, f"img_{timestamp}_rot-15.jpg")
+    rot_neg.save(rot_neg_path)
 
 # 3. Sidebar Configuration
 with st.sidebar:
@@ -123,10 +146,16 @@ with st.sidebar:
     )
     st.markdown("---")
 
-    # Stealth reset button disguised as a simple pineapple logo at the bottom of the sidebar
-    if st.button("🍍"):
-        st.session_state.upload_count = 0
+    # Manual Override Controls for Presentation/Demo
+    st.markdown("### 🎛️ Demo Controls")
+    enable_override = st.checkbox("Enable Manual Override", value=True)
+    override_class = st.selectbox(
+        "Forced Diagnosis",
+        options=class_labels,
+        disabled=not enable_override
+    )
 
+    st.markdown("---")
     show_debug = st.checkbox("Show Raw Output Array", value=False)
 
 # 4. Main Interface Header
@@ -176,36 +205,19 @@ if uploaded_file is not None:
                 raw_probs[winning_idx] = winning_prob
                 return raw_probs / np.sum(raw_probs)
 
-            # --- SEQUENTIAL SILENT OVERRIDE MAP ---
-            # 1st upload (0) -> Root Rot (Index 5)
-            # 2nd upload (1) -> Heart Rot (Index 2)
-            # 3rd upload (2) -> Multi-Crown Disorder (Index 4)
-            # 4th upload (3) -> Fruit Rot (Index 0)
-            # 5th upload (4) -> Mealybug Wilt (Index 3)
-            # 6th upload (5) -> Healthy (Index 1)
-            sequence_map = {
-                0: 5,
-                1: 2,
-                2: 4,
-                3: 0,
-                4: 3,
-                5: 1,
-            }
-
-            if st.session_state.upload_count < 6:
-                winning_index = sequence_map[st.session_state.upload_count]
+            # --- MANUAL OVERRIDE LOGIC ---
+            if enable_override:
+                winning_index = class_labels.index(override_class)
                 predictions = generate_random_predictions(
                     winning_idx=winning_index, num_classes=6
                 )
-                st.session_state.upload_count += 1
             else:
-                # After 6 uploads, use real model predictions if loaded, otherwise fallback gracefully
+                # Use real model predictions if loaded, otherwise fallback gracefully
                 if model is not None:
                     predictions = model.predict(img_array)[0]
                 else:
-                    # Fallback random prediction if model couldn't be loaded
                     predictions = generate_random_predictions(winning_idx=1, num_classes=6)
-            # -------------------------------------
+            # -----------------------------
 
             predicted_idx = int(np.argmax(predictions))
             predicted_class = class_labels[predicted_idx]
@@ -225,6 +237,17 @@ if uploaded_file is not None:
         st.markdown("#### 💡 Recommended Action")
         st.markdown(recommendations[predicted_class])
 
+        # Augmentation & Dataset Saving Button
+        st.markdown("---")
+        if st.button("🔄 Augment & Save to Training Dataset"):
+            try:
+                # Apply current diagnosis label (from override or model prediction)
+                target_label = override_class if enable_override else predicted_class
+                augment_and_save_image(image_pil, target_label)
+                st.success(f"Successfully generated augmented variations and saved under `dataset/{target_label}/`!")
+            except Exception as ex:
+                st.error(f"Error saving augmented images: {ex}")
+
         # Class Breakdown Section
         st.markdown("---")
         st.subheader("📊 Confidence Breakdown Across All Classes")
@@ -237,8 +260,9 @@ if uploaded_file is not None:
         # Debug Output
         if show_debug:
             st.markdown("---")
-            st.write(f"Current Sequence Step: {st.session_state.upload_count}")
-            st.write("Raw Model Probabilities:", predictions)
+            st.write(f"Manual Override Active: {enable_override}")
+            st.write(f"Forced Class: {override_class if enable_override else 'None (Model/Fallback)'}")
+            st.write("Raw Model/Generated Probabilities:", predictions)
 
 else:
     st.info(
